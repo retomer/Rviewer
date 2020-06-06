@@ -168,7 +168,6 @@ class Server(object):
         self.count = 0
         self.clients_array = []
 
-
     def start(self):
         # starting the tcp server
         try:
@@ -223,8 +222,9 @@ class Server(object):
             except EOFError:
                 pass
 
+
 # create an instance of Server class and start it
 ip = '0.0.0.0'
-port = 8888
+port = 9999
 s = Server(ip, port)
 s.start()
