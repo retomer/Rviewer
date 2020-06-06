@@ -12,27 +12,27 @@ import cv2
 import ctypes
 import threading
 from pynput.mouse import Listener
+from pynput.keyboard import Key
+from pynput.keyboard import Listener as Listenerk
 from PIL import ImageGrab
 import socket
 import pyautogui
-"""
-#########################################################################################
-"""
+from tkinter import messagebox
+
 #  Get the size of the user's screen
 user32 = ctypes.windll.user32
 user32.SetProcessDPIAware()
 myscreenx, myscreeny = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
-
 """
 #########################################################################################
 """
 
 
-"""gets from the controler the mouse cordinates and executes them"""
-def get_mouse_cordinates(letshare_socket):
+def get_mouse_cordinates(letshare_socket1):
+    """gets from the controller the mouse coordinates and executes them"""
     while True:
         try:
-            mdata = letshare_socket.recv(10).decode('utf-8')
+            mdata = letshare_socket1.recv(10).decode('utf-8')
 
             while mdata[0] == '0':
                 mdata = mdata[1:]
@@ -54,35 +54,60 @@ def get_mouse_cordinates(letshare_socket):
             pass
 
 
-"""share the screen to the control user"""
-def sharing_the_screen(letshare_socket):
+def close_end2():
+    """close the tkinter screen"""
+    end_screen2.destroy()
+    pass
+
+
+def end_remote_mode():
+    """show a message about the end of the remote modee"""
+    messagebox.showinfo("exit", "The Remote Has Ended\n Thank You For Using Rviewer!")
+
+
+def stop_the_share(boolean=True):
+    """stops the screen sharing"""
+    print("from stop the share")
+    if boolean:
+        end_screen2.destroy()
+    letshare_socket.close()
+    listenerk.stop()
+    end_remote_mode()
+
+
+def sharing_the_screen(letshare_socket2):
+    """share the screen to the control user"""
     # get the size of the screen
-    user32 = ctypes.windll.user32
-    user32.SetProcessDPIAware()
+    user_32 = ctypes.windll.user32
+    user_32.SetProcessDPIAware()
 
-    screenx, screeny = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+    screen_x, screen_y = user_32.GetSystemMetrics(0), user_32.GetSystemMetrics(1)
 
-    img1 = ImageGrab.grab(bbox=(0, 0, screenx, screeny))
+    img1 = ImageGrab.grab(bbox=(0, 0, screen_x, screen_y))
     photo_to_send1 = img1.tobytes()
     size = len(photo_to_send1)
 
-    letshare_socket.send(bytes(str(screenx).zfill(4), 'utf-8'))
-    letshare_socket.send(bytes(str(screeny).zfill(4), 'utf-8'))
-    letshare_socket.send(bytes(str(size).zfill(10), 'utf-8'))
+    letshare_socket2.send(bytes(str(screen_x).zfill(4), 'utf-8'))
+    letshare_socket2.send(bytes(str(screen_y).zfill(4), 'utf-8'))
+    letshare_socket2.send(bytes(str(size).zfill(10), 'utf-8'))
 
     while True:
-        img = ImageGrab.grab(bbox=(0, 0, screenx, screeny))
+        img = ImageGrab.grab(bbox=(0, 0, screen_x, screen_y))
         photo_to_send = img.tobytes()
         try:
-            letshare_socket.send(photo_to_send)
+            letshare_socket2.send(photo_to_send)
         except ConnectionAbortedError:
+            stop_the_share(False)
             break
         except ConnectionResetError:
+            stop_the_share(False)
+            break
+        except OSError:
             break
 
 
-"""send the mouse cordinates to the controlled user"""
-def send_mouse_cordinates(mx, my, button):
+def send_mouse_coordinates(mx, my, button):
+    """send the mouse coordinates to the controlled user"""
     dodo = [tuple_of_sizes[0], tuple_of_sizes[1], tuple_of_sizes[2], tuple_of_sizes[3]]
 
     # only when running on one computer two monitors
@@ -98,100 +123,131 @@ def send_mouse_cordinates(mx, my, button):
     control_socket.send(bytes(str1.zfill(10), 'utf-8'))
 
 
-"""listener of the mouse, and checks the cordinates of the click"""
-def on_click(x, y, button, pressed):
+def on_click(x, y, button, press):
+    """listener of the mouse, and checks the coordinates of the click"""
     if math.fabs(tuple_of_sizes[0]) < 1920:
         if x >= tuple_of_sizes[0] and y >= tuple_of_sizes[1]:
             if -1920 < x < 0:
-                send_mouse_cordinates(x, y, str(button)[7])
+                send_mouse_coordinates(x, y, str(button)[7])
 
 
-"""starts the listener of the mouse"""
 def start_mouse_listener():
+    """starts the listener of the mouse"""
     global listener
     with Listener(on_click=on_click) as listener:
         listener.join()
 
 
-"""getting the screen share"""
-def getting_screen_share(control_socket):
+def getting_screen_share(control_socket2):
+    """getting the screen share"""
     global screenx, screeny
-    screenx = int(control_socket.recv(4).decode('utf-8'))
-    screeny = int(control_socket.recv(4).decode('utf-8'))
-    size = int(control_socket.recv(10).decode('utf-8'))
+    screenx = int(control_socket2.recv(4).decode('utf-8'))
+    screeny = int(control_socket2.recv(4).decode('utf-8'))
+    size = int(control_socket2.recv(10).decode('utf-8'))
 
-    while True:
-        chunks = []
-        rc_data = 0
-        while rc_data < size:
-            chunk = control_socket.recv(size - rc_data)
-            chunks.append(chunk)
-            rc_data += len(chunk)
+    try:
+        while True:
+            chunks = []
+            rc_data = 0
+            while rc_data < size:
+                chunk = control_socket2.recv(size - rc_data)
+                chunks.append(chunk)
+                rc_data += len(chunk)
 
-        img_to_save = PIL.Image.frombytes("RGB", (screenx, screeny), b''.join(chunks))
-        img_np = numpy.array(img_to_save)
-        imS = cv2.resize(img_np, (myscreenx, myscreeny-150))
+            img_to_save = PIL.Image.frombytes("RGB", (screenx, screeny), b''.join(chunks))
+            img_np = numpy.array(img_to_save)
+            imS = cv2.resize(img_np, (myscreenx, myscreeny-150))
 
-        img_np = cv2.cvtColor(imS, cv2.COLOR_BGR2RGB)
-        cv2.namedWindow('frame')
-        cv2.imshow('frame', img_np)
-        global tuple_of_sizes
-        tuple_of_sizes = cv2.getWindowImageRect('frame')
+            img_np = cv2.cvtColor(imS, cv2.COLOR_BGR2RGB)
+            cv2.namedWindow('frame')
+            cv2.imshow('frame', img_np)
+            global tuple_of_sizes
+            tuple_of_sizes = cv2.getWindowImageRect('frame')
 
-        key = cv2.waitKey(1)
-        if key == 27:
-            break
+            key = cv2.waitKey(1)
+            if key == 27:
+                break
+    except ConnectionResetError:
+        pass
 
+    print("from here")
     listener.stop()
+    control_socket.close()
     cv2.destroyAllWindows()
+    end_remote_mode()
 
 
-"""
-#########################################################################################
-"""
-
-
-"""open a connection with the second user in order to perform screen share"""
 def control_and_see_another_computer(hi):
+    """open a connection with the second user in order to perform screen share"""
     global control_socket
 
     try:
         control_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        control_socket.settimeout(2.0)
         control_socket.connect((ip, int(port)))
         global tr1, tr2
         tr1 = threading.Thread(target=getting_screen_share, args=(control_socket,))
         tr2 = threading.Thread(target=start_mouse_listener)
         tr2.start()
         tr1.start()
+        hi.close_ctrl()
     except:
         hi.ctrl_screen.destroy()
-        hi.control("oops!\nsomething went wrong\n make sure that the code is correct\n and that your fellow pressed his button")
+        hi.control("oops!\nsomething went wrong\n make sure that the code is correct\n"
+                   " and that your fellow pressed his button")
 
 
-"""open a connection with the second user in order to perform screen share"""
-def let_other_computer_control():
-    ServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    ServerSocket.bind(('0.0.0.0', PORT))
-    ServerSocket.listen(1)
+def dont_stop_me_now():
+    """close the end remote window"""
+    end_screen2.destroy()
+
+
+def on_key_release(key):
+    """open the end remote window when the user press f4"""
+    print('{0} release'.format(key))
+    if key == key.f4:
+        global end_screen2
+        end_screen2 = Tk()
+        end_screen2.title('exit remote mode')
+        end_screen2.geometry('460x250')
+        Label(end_screen2, text="").pack()
+        Label(end_screen2, text="are you sure you want \nto stop the remote mode?", font=("Helvetica", 20), fg='#003F87').pack()
+        global yesb
+        yesb = Button(end_screen2, text="Yes", font=("Helvetica", 16), bg="#948771", command=stop_the_share)
+        yesb.pack()
+        Label(end_screen2, text="").pack()
+        Button(end_screen2, text="NO", font=("Helvetica", 16), bg="#948771", command=dont_stop_me_now).pack()
+        end_screen2.protocol('WM_DELETE_WINDOW', close_end2)
+        end_screen2.mainloop()
+
+
+def listen_to_keyboard():
+    """listen to keyboards pressses"""
+    global listenerk
+    with Listenerk(on_release=on_key_release) as listenerk:
+        listenerk.join()
+
+
+def let_other_computer_control(hi2):
+    """open a connection with the second user in order to perform screen share"""
+    serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    serversocket.bind(('0.0.0.0', PORT))
+    serversocket.listen(1)
     # declare the socket as a global var
     global letshare_socket
-    (letshare_socket, client_address) = ServerSocket.accept()
+    (letshare_socket, client_address) = serversocket.accept()
 
     global t1, t2
     t1 = threading.Thread(target=sharing_the_screen, args=(letshare_socket,))
     t2 = threading.Thread(target=get_mouse_cordinates, args=(letshare_socket,))
+    t3 = threading.Thread(target=listen_to_keyboard)
+    t3.start()
     t2.start()
     t1.start()
+    hi2.close_share()
 
 
-"""
-#########################################################################################
-"""
-
-
-"""sending a file to another user"""
-def send_file(client_socket):
+def send_file(client_socket2):
+    """sending a file to another user"""
     if len(fl_arr) > 1:
         zipping = zipfile.ZipFile('filestosend.zip', 'w')
         for i in fl_arr:
@@ -207,13 +263,13 @@ def send_file(client_socket):
         name = (f1.split("\\")[-1]).split('.')[-1]
     else:
         name = f1.split('.')[-1]
-    client_socket.send(bytes(name.zfill(5), 'utf-8'))
-    client_socket.send(bytes(size.zfill(10), 'utf-8'))
+    client_socket2.send(bytes(name.zfill(5), 'utf-8'))
+    client_socket2.send(bytes(size.zfill(10), 'utf-8'))
 
     with open(f1, 'rb') as f:
         bytestosend = f.read(1024)
         while len(bytestosend) != 0:
-            client_socket.send(bytestosend)
+            client_socket2.send(bytestosend)
             bytestosend = f.read(1024)
 
 
@@ -221,29 +277,24 @@ def send_file(client_socket):
         os.remove(f1)
 
 
-"""getting a file from another user"""
-def get_file(client_socket):
-    ending = client_socket.recv(5).decode('utf-8').replace('0', '')
-    size = int(client_socket.recv(10).decode('utf-8'))
+def get_file(client_socket3):
+    """getting a file from another user"""
+    ending = client_socket3.recv(5).decode('utf-8').replace('0', '')
+    size = int(client_socket3.recv(10).decode('utf-8'))
     now = datetime.now()
     current_time = str(now.strftime("%Y-%m-%d--%H-%M"))
     fl_name = "Rviewer-" + current_time + "." + ending
     with open(fl_name, 'wb') as fl:
         while size >= 0:
-            indata = client_socket.recv(1024)
+            indata = client_socket3.recv(1024)
             size -= 1024
             fl.write(indata)
     fl.close()
 
 
-"""
-#########################################################################################
-"""
-
-
-"""encryption of the ip and port"""
-def combine(ip, port):
-    arr = ip.split('.')
+def combine(ip2, port2):
+    """encryption of the ip and port"""
+    arr = ip2.split('.')
     for i in range(len(arr)):
         arr[i] = int(arr[i])
 
@@ -274,13 +325,13 @@ def combine(ip, port):
         elif arr[i][0] > 0:
             str_arr[i] = f"""{arr[i][0]}{chr(arr[i][1])}"""
 
-    return f"""{str_arr[0]}-{str_arr[1]}-{str_arr[2]}-{str_arr[3]}-{port << 1}"""
+    return f"""{str_arr[0]}-{str_arr[1]}-{str_arr[2]}-{str_arr[3]}-{port2 << 1}"""
 
 
-"""decryption of the ip and port"""
 def decombine(code):
+    """decryption of the ip and port"""
     str_arr = code.split("-")
-    port = int(str_arr[-1]) >> 1
+    port3 = int(str_arr[-1]) >> 1
     del str_arr[-1]
     for i in range(len(str_arr)):
         if str_arr[i].isalpha():
@@ -302,42 +353,34 @@ def decombine(code):
     for i in range(len(str_arr)):
         str_arr[i] = str_arr[i] >> 2
 
-    return f"""{str_arr[0]}.{str_arr[1]}.{str_arr[2]}.{str_arr[3]}:{port}"""
+    return f"""{str_arr[0]}.{str_arr[1]}.{str_arr[2]}.{str_arr[3]}:{port3}"""
 
 
-"""
-#########################################################################################
-"""
+def sending_the_files(hi3):
+    """open a connection with the second user in order to perform files share"""
+    serversocket2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    serversocket2.bind(('0.0.0.0', PORT))
+    serversocket2.listen(1)
+    clientsocket, clientaddress = serversocket2.accept()
+    send_file(clientsocket)
+    hi3.close_sndfl()
 
 
-"""open a connection with the second user in order to perform files share"""
-def sending_the_files():
-    ServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    ServerSocket.bind(('0.0.0.0', PORT))
-    ServerSocket.listen(1)
-    ClientSocket, ClientAddress = ServerSocket.accept()
-    send_file(ClientSocket)
-
-
-"""open a connection with the second user in order to perform files share"""
-def recv_the_files(hi):
+def recv_the_files(hi4):
+    """open a connection with the second user in order to perform files share"""
     try:
-        ClientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        ClientSocket.settimeout(2.0)
-        ClientSocket.connect((ip, int(port)))
-        get_file(ClientSocket)
+        clientsocket4 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        clientsocket4.settimeout(2.0)
+        clientsocket4.connect((ip, int(port)))
+        get_file(clientsocket4)
+        hi4.close_getfiles()
     except:
-        hi.get_fl.destroy()
-        hi.get_files("oops!\nsomething went wrong\n make sure that the code is correct\n and that your fellow pressed his button")
-
-
-"""
-#########################################################################################
-"""
+        hi4.get_fl.destroy()
+        hi4.get_files("oops!\nsomething went wrong\n make sure that the code is correct\n and that your fellow pressed his button")
 
 
 class RviwerUserInterface:
-    """RviwerUserInterface implemnts the graphic user interface and the login and register """
+    """RviwerUserInterface implements the graphic user interface and the login and register """
     def __init__(self):
         """
         defying variables such as open, register and login screens.
@@ -363,11 +406,11 @@ class RviwerUserInterface:
         label1.pack()
 
         Button(self.open_screen, text="Login", width='14', height='3', font=("Helvetica", 20), bg='#948771', command=self.login_interface).place(x=90, y=250)
-        Button(self.open_screen, text="Register", width="14", height='3', font=("Helvetica", 20), bg='#948771', command=self.register_inerface).place(x=90, y=400)
+        Button(self.open_screen, text="Register", width="14", height='3', font=("Helvetica", 20), bg='#948771', command=self.register_interface).place(x=90, y=400)
         self.open_screen.mainloop()
 
-    # trying to decrypt the code
     def exe_screen(self):
+        # trying to decrypt the code
         self.combi = f"""{self.combi_array[0].get()}-{self.combi_array[1].get()}-{self.combi_array[2].get()}-{self.combi_array[3].get()}-{self.combi_array[4].get()}"""
         self.combi_array = []
         try:
@@ -383,6 +426,10 @@ class RviwerUserInterface:
         # close the window
         self.screensh.destroy()
 
+    def after_share(self):
+        # activate the screen share
+        let_other_computer_control(self)
+
     def share(self):
         # open the window before the screen share
         self.screensh = Tk()
@@ -392,7 +439,8 @@ class RviwerUserInterface:
         Label(self.screensh, text="in order to start the sharing,\npress the botton,\n and give your fellow the code:\n ", font=("Helvetica", 16), fg='#003F87').pack()
         combi = combine(ADRESS, PORT)
         Label(self.screensh, text=combi, font=("Helvetica", 16), fg='#003F87').pack()
-        Button(self.screensh, text="press me", font=("Helvetica", 16), bg="#948771", command=let_other_computer_control).pack()
+        Button(self.screensh, text="press me", font=("Helvetica", 16), bg="#948771", command=self.after_share).pack()
+        Label(self.screensh, text="you can end the remote anytime\n by pressing the f4 key".title(), font=("Helvetica", 18), fg='red').pack()
 
         self.screensh.protocol('WM_DELETE_WINDOW', self.close_share)
 
@@ -407,7 +455,7 @@ class RviwerUserInterface:
         # open the screen before the controling
         self.ctrl_screen = Tk()
         self.ctrl_screen.geometry('400x360')
-        self.ctrl_screen.title('controling')
+        self.ctrl_screen.title('controlling')
         self.combi_array = [None, None, None, None, None]
 
         Label(self.ctrl_screen, text="Please enter the code", font=("Helvetica", 16), fg="#003F87").pack()
@@ -451,7 +499,11 @@ class RviwerUserInterface:
         # close the window
         self.snd_fl.destroy()
 
-    def afrer_selecting(self, files_array):
+    def send_fl(self):
+        # activate the file sending
+        sending_the_files(self)
+
+    def after_selecting(self, files_array):
         # shows to code to the user in order to send the files
         self.snd_fl.destroy()
         self.snd_fl = Tk()
@@ -461,7 +513,7 @@ class RviwerUserInterface:
         Label(self.snd_fl, text="in order to start the sharing,\npress the botton,\n and give your fellow the code:\n ", font=("Helvetica", 16), fg='#003F87').pack()
         combi = combine(ADRESS, PORT)
         Label(self.snd_fl, text=combi, font=("Helvetica", 16), fg='#003F87').pack()
-        Button(self.snd_fl, text="press me", font=("Helvetica", 16), bg="#948771", command=sending_the_files).pack()
+        Button(self.snd_fl, text="press me", font=("Helvetica", 16), bg="#948771", command=self.send_fl).pack()
         self.snd_fl.protocol('WM_DELETE_WINDOW', self.close_sndfl)
         self.snd_fl.mainloop()
 
@@ -476,7 +528,7 @@ class RviwerUserInterface:
             self.files_label.pack()
             self.open_fl_slct()
 
-        self.afrer_selecting(fl_arr)
+        self.after_selecting(fl_arr)
 
     def send_files(self):
         # open before file selection window
@@ -634,13 +686,13 @@ class RviwerUserInterface:
         self.register_screen.destroy()
         self.register_arr = []
 
-    def register_inerface(self):
+    def register_interface(self):
         # open register window
         self.register_arr = []
         self.register_screen = Toplevel(self.open_screen)
         self.register_screen.title("Register")
         self.register_screen.geometry("450x500")
-        Label(self.register_screen, text="Rviewer Registraion", font=("Helvetica", 16), fg='#003F87').pack()
+        Label(self.register_screen, text="Rviewer Registration", font=("Helvetica", 16), fg='#003F87').pack()
 
         Label(self.register_screen, text="please enter your details below".title(), font=("Helvetica", 16)).pack()
 
@@ -705,7 +757,7 @@ def main():
     # connect to the server
     global client_socket, hi
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect(('127.0.0.1', 8888))
+    client_socket.connect(('127.0.0.1', 9999))
     # start the rviewer
     hi = RviwerUserInterface()
 
